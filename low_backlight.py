@@ -2,7 +2,7 @@ import numpy as np
 import cv2
 import matplotlib.pyplot as plt
 
-def device_characteristic_modelling(image, M, gamma_r, gamma_g, gamma_b) -> np.ndarray:
+def device_rgb_to_xyz(image, M, gamma_r, gamma_g, gamma_b) -> np.ndarray:
     """
     Transforms an RGB image using the formula [x y z] = M [R^gamma_r G^gamma_g B^gamma_b].
     
@@ -33,6 +33,38 @@ def device_characteristic_modelling(image, M, gamma_r, gamma_g, gamma_b) -> np.n
 
     # Reshape back to the original image dimensions
     return transformed.reshape(h, w, 3)
+
+def device_xyz_to_rgb(image, M, gamma_r, gamma_g, gamma_b) -> np.ndarray:
+    """
+    Performs the inverse operation of device_rgb_to_xyz
+    
+    Args:
+        image (numpy.ndarray): Input image as a 3D numpy array (H x W x 3) in XYZ format.
+
+        M (numpy.ndarray): 3x3 transformation matrix. (device characteristic)
+
+        gamma_r (float): Gamma correction for the red channel. (device characteristic)
+
+        gamma_g (float): Gamma correction for the green channel. (device characteristic)
+
+        gamma_b (float): Gamma correction for the blue channel. (device characteristic)
+
+    Returns:
+        numpy.ndarray: Transformed image (H x W x 3).
+    """
+    h, w, _ = image.shape
+    M_inverse = np.linalg.inv(M)
+    image_inverse = np.dot(M_inverse, image.reshape(-1, 3).T).T
+    image_inverse = image_inverse.reshape(h, w, 3)
+    image_inverse[..., 0] = image_inverse[..., 0] ** (1/gamma_r)  
+    image_inverse[..., 1] = image_inverse[..., 1] ** (1/gamma_g)  
+    image_inverse[..., 2] = image_inverse[..., 2] ** (1/gamma_b)
+
+    # Reshape back to the original image dimensions
+    return image_inverse.astype(np.uint8)
+
+
+
 
 def simulated_low_backlight (image: np.ndarray, M_f, gamma_rf, gamma_gf, gamma_bf) -> np.ndarray: 
     """
