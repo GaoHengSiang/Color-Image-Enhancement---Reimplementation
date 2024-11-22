@@ -2,6 +2,20 @@ import numpy as np
 import cv2
 import matplotlib.pyplot as plt
 
+# Device Characteristics =================================
+#full light
+gamma_rf, gamma_gf, gamma_bf = 2.4767, 2.4286, 2.3792
+M_f = np.array([[95.57,  64.67,  33.01],
+                [49.49, 137.29,  14.76],
+                [ 0.44,  27.21, 169.83]])
+
+#low light
+gamma_rl, gamma_gl, gamma_bl = 2.2212, 2.1044, 2.1835
+M_l = np.array([[4.61, 3.35, 1.78],
+                [2.48, 7.16, 0.79],
+                [0.28, 1.93, 8.93]])
+#=========================================================
+
 def device_rgb_to_xyz(image, M, gamma_r, gamma_g, gamma_b) -> np.ndarray:
     """
     Transforms an RGB image using the formula [x y z] = M [R^gamma_r G^gamma_g B^gamma_b].
@@ -23,6 +37,10 @@ def device_rgb_to_xyz(image, M, gamma_r, gamma_g, gamma_b) -> np.ndarray:
     # Apply gamma correction to each channel
     image_gamma = np.zeros_like(image, dtype=np.float32)
     h ,w, _ = image.shape
+
+    # Assert all values are in the range [0, 255]
+    assert np.all(image >= 0), "Some values are less than 0!"
+    assert np.all(image <= 255), "Some values are greater than 255!"
 
     image_gamma[..., 0] = image[..., 0] ** gamma_r  # R^gamma_r
     image_gamma[..., 1] = image[..., 1] ** gamma_g  # G^gamma_g
@@ -56,19 +74,24 @@ def device_xyz_to_rgb(image, M, gamma_r, gamma_g, gamma_b) -> np.ndarray:
     M_inverse = np.linalg.inv(M)
     image_inverse = np.dot(M_inverse, image.reshape(-1, 3).T).T
     image_inverse = image_inverse.reshape(h, w, 3)
+
+
+    # Assert all values are in the range [0, inf)
+    #assert np.all(image_inverse >= 0), "Some values are less than 0!"
+    if np.any(image_inverse < 0):
+        print ("clipping negative intermediate values during conversion")
+        image_inverse = np.clip(image_inverse, a_min = 0, a_max = None)
+
     image_inverse[..., 0] = image_inverse[..., 0] ** (1/gamma_r)  
     image_inverse[..., 1] = image_inverse[..., 1] ** (1/gamma_g)  
     image_inverse[..., 2] = image_inverse[..., 2] ** (1/gamma_b)
 
     # Reshape back to the original image dimensions
-    return image_inverse.astype(np.uint8)
-
-
-
+    return image_inverse
 
 def simulated_low_backlight (image: np.ndarray, M_f, gamma_rf, gamma_gf, gamma_bf) -> np.ndarray: 
     """
-    Given RGB image and the viewing device's characteristics, simulates what it looks like on a low backlight display
+      Given RGB image and the viewing device's characteristics, simulates what it looks like on a low backlight display
     
     Args:
         image (numpy.ndarray): Input image as a 3D numpy array (H x W x 3) in RGB format.
@@ -85,11 +108,11 @@ def simulated_low_backlight (image: np.ndarray, M_f, gamma_rf, gamma_gf, gamma_b
         numpy.ndarray: Transformed image (H x W x 3).
     """
     # Virtual low backlight display characteristics =================================
-    gamma_rl, gamma_gl, gamma_bl = 2.2212, 2.1044, 2.1835
-    M_l = np.array([[4.61, 3.35, 1.78],
-                    [2.48, 7.16, 0.79],
-                    [0.28, 1.93, 8.93]])
-    
+    #gamma_rl, gamma_gl, gamma_bl = 2.2212, 2.1044, 2.1835
+    #M_l = np.array([[4.61, 3.35, 1.78],
+    #                [2.48, 7.16, 0.79],
+    #                [0.28, 1.93, 8.93]])
+    #
     #=========================================================
     image_gamma = np.zeros_like(image, dtype=np.float32)
     h ,w, _ = image.shape
@@ -113,6 +136,30 @@ def simulated_low_backlight (image: np.ndarray, M_f, gamma_rf, gamma_gf, gamma_b
 
     # Reshape back to the original image dimensions
     return image_inverse.astype(np.uint8)
+
+def post_gamut_mapping(original_rgb: np.ndarray, enhanced_xyz, JC: float) -> np.ndarray:
+    """
+      The enhanced tristimulus (XYZ) values may not map into valid RGB space, hence it is necessary
+    to perform post-gamut-mapping.
+      Alleviate loss of details, we implement soft clipping with weighted average
+
+    Args:
+        original_rgb (np.ndarray): original RGB image
+
+        enhanced_xyz (np.ndarray): X Y Z tristimulus image
+
+        JC (float): The coefficient of weighted average
+
+    Returns:
+        numpy.ndarray: Transformed image (H x W x 3).
+    """ 
+    enhanced_rgb = device_xyz_to_rgb(enhanced_xyz, M_l, gamma_rl, gamma_gl, gamma_bl)
+    clipped_rgb = np.clip(enhanced_rgb, 0, 255).astype(np.uint8)
+      # Perform weighted average
+    result = cv2.addWeighted(original_rgb, JC, clipped_rgb, 1-JC, gamma = 0)
+    
+    return result
+
 
 if __name__ == "__main__":
     # Read the image
@@ -142,24 +189,16 @@ if __name__ == "__main__":
     #                [[0, 255, 0], [255, 255, 0], [0, 255, 255]],
     #                [[0, 0, 255], [128, 0, 128], [255, 255, 255]]], dtype=np.uint8)
 
-    # Device Characteristics =================================
-    #full light
-    gamma_rf, gamma_gf, gamma_bf = 2.4767, 2.4286, 2.3792
-    M_f = np.array([[95.57,  64.67,  33.01],
-                    [49.49, 137.29,  14.76],
-                    [ 0.44,  27.21, 169.83]])
-
-    #low light
-    gamma_rl, gamma_gl, gamma_bl = 2.2212, 2.1044, 2.1835
-    M_l = np.array([[4.61, 3.35, 1.78],
-                    [2.48, 7.16, 0.79],
-                    [0.28, 1.93, 8.93]])
-    #=========================================================
-
-
     #Process the image
-    #transformed_image = device_characteristic_modelling(image, M, gamma_r, gamma_g, gamma_b)
-    transformed_image = simulated_low_backlight(image_rgb, M_f, gamma_rf, gamma_gf, gamma_bf)
+    transformed_image1 = simulated_low_backlight(image_rgb, M_f, gamma_rf, gamma_gf, gamma_bf)
+
+    #test post gamut mapping
+    #1. show tristimulus value of larger range
+    _img = device_rgb_to_xyz(image_rgb, M_f, gamma_rf, gamma_gf, gamma_bf)
+    #low backlight should not be able to handle full gamut, resulting in out of range RGB values
+    #transformed_image2 = post_gamut_mapping(image_rgb, _img, 0.5) #return rgb values
+    #to view the effect on normal screen,  we simulate low backlight (using M_f, gamma_xf as my devices characteristic)
+    #transformed_image2 = simulated_low_backlight(transformed_image2, M_f, gamma_rf, gamma_gf, gamma_bf) 
 
     # Create a figure with two subplots side by side
     plt.figure(figsize=(10, 5))  # Adjust the figure size
@@ -172,7 +211,7 @@ if __name__ == "__main__":
 
     # Show the second image
     plt.subplot(1, 2, 2)  # 1 row, 2 columns, second subplot
-    plt.imshow(transformed_image)
+    plt.imshow(transformed_image1)
     plt.axis('off')  # Hide axes
     plt.title("low light")  # Optional title
 
