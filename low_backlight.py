@@ -137,7 +137,7 @@ def simulated_low_backlight (image: np.ndarray, M_f, gamma_rf, gamma_gf, gamma_b
     # Reshape back to the original image dimensions
     return image_inverse.astype(np.uint8)
 
-def post_gamut_mapping(original_rgb: np.ndarray, enhanced_xyz, JC: float) -> np.ndarray:
+def post_gamut_mapping(original_rgb: np.ndarray, enhanced_xyz, JC: np.ndarray) -> np.ndarray:
     """
       The enhanced tristimulus (XYZ) values may not map into valid RGB space, hence it is necessary
     to perform post-gamut-mapping.
@@ -148,7 +148,7 @@ def post_gamut_mapping(original_rgb: np.ndarray, enhanced_xyz, JC: float) -> np.
 
         enhanced_xyz (np.ndarray): X Y Z tristimulus image
 
-        JC (float): The coefficient of weighted average
+        JC (float): J*C, The coefficient of weighted average for each pixel
 
     Returns:
         numpy.ndarray: Transformed image (H x W x 3).
@@ -156,8 +156,8 @@ def post_gamut_mapping(original_rgb: np.ndarray, enhanced_xyz, JC: float) -> np.
     enhanced_rgb = device_xyz_to_rgb(enhanced_xyz, M_l, gamma_rl, gamma_gl, gamma_bl)
     clipped_rgb = np.clip(enhanced_rgb, 0, 255).astype(np.uint8)
       # Perform weighted average
-    result = cv2.addWeighted(original_rgb, JC, clipped_rgb, 1-JC, gamma = 0)
-    
+    #result = cv2.addWeighted(original_rgb, JC, clipped_rgb, 1-JC, gamma = 0)
+    result = original_rgb*JC + clipped_rgb*(1-JC)
     return result
 
 
