@@ -1,3 +1,14 @@
+"""
+This code is courtesy of:
+https://tannerhelland.com/2012/09/18/convert-temperature-rgb-algorithm-code.html
+
+Applies nightlight effect by multiplying the RGB channel with different gains
+closely simulates the windows nightlight effect
+
+"""
+
+
+
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
