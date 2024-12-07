@@ -1,6 +1,4 @@
-import cv2 
 import numpy as np 
-import matplotlib.pyplot as plt 
 
 # ========== CIECAM02 ========== #
 def calculate_viewing_conditions(La: float, Yb: float, Yw: float, sR: str = 'average') -> dict:
