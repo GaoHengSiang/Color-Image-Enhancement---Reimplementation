@@ -64,7 +64,7 @@ def chromatic_adaptation(image_xyz: np.ndarray, white_point_xyz: np.ndarray, par
     
     # Apply D factor (degree of adaptation)
     D = params['F'] * (1 - (1/3.6) * np.exp((-La - 42)/92))
-    adapted_lms = D * (image_lms / white_point_lms) + (1 - D) * image_lms.mean(axis=(0, 1))
+    adapted_lms = (D * (image_lms / white_point_lms) + (1 - D)) * image_lms.mean(axis=(0, 1))
     
     return adapted_lms
 
