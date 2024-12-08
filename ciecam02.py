@@ -165,8 +165,13 @@ class CIECAM02:
         # We only need to return 3 out of 7 components calculated. Here, I chose J, Q, H. The inverse will be built upon these three components. 
 # Teacher's slides uses JCh, will that make a difference?
 # might be a typo here: Q --> C
+#EDIT: Changed to JCH and removed scaling
+
 #why times 1.0, 1.0, 0.9?
-        return np.array([J, Q, H]).T*np.array([1.0, 1.0, 0.9]) # np.array([h, H, J, Q, C, M, s]).T
+        #before 
+        # return np.array([J, Q, H]).T*np.array([1.0, 1.0, 0.9]) # np.array([h, H, J, Q, C, M, s]).T
+        #after
+        return np.array([J, C, H]).T
     
     def inverse_transfer_hue(self, H_, coarray):
         position = coarray.searchsorted(H_)
@@ -190,7 +195,9 @@ class CIECAM02:
             numpy.ndarray: Array of shape (N, 3) containing XYZ tristimulus values.
         """
         # Step 1: Extract J, C, and H and handle scaling for input format
-        JCH = JCH * np.array([1.0, 1.0, 10 / 9.0])
+#        JCH = JCH * np.array([1.0, 1.0, 10 / 9.0])
+#EDIT: Removed scaling of H in forward mode
+
         J, C, H = JCH[:, 0], JCH[:, 1], JCH[:, 2]
         # Clip J and C to avoid numerical issues
         J = np.maximum(J, 1e-5)
