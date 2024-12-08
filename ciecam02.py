@@ -123,9 +123,8 @@ class CIECAM02:
 
         # Step 4: Post-adaptation response
 #EDIT: handle negative R_G_B_ values
-        R_G_B_in = np.where(R_G_B_ >= 0, 
-                            np.power(FL * R_G_B_ / 100, 0.42),
-                            np.power(-FL * R_G_B_ / 100, 0.42))
+        R_G_B_in = np.power(FL * np.abs(R_G_B_) / 100, 0.42)
+                            
         Ra_Ga_Ba_ = np.where(R_G_B_ >= 0,
                             (400 * R_G_B_in) / (27.13 + R_G_B_in) + 0.1,
                             (-400 * R_G_B_in) / (27.13 + R_G_B_in) + 0.1)
