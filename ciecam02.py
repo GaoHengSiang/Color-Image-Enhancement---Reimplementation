@@ -122,8 +122,13 @@ class CIECAM02:
         R_G_B_ = RcGcBc.dot(self.inv_Mcat02.T).dot(self.Mhpe.T)
 
         # Step 4: Post-adaptation response
-        R_G_B_in = np.power(FL * R_G_B_ / 100, 0.42)
-        Ra_Ga_Ba_ = (400 * R_G_B_in) / (27.13 + R_G_B_in) + 0.1
+#EDIT: handle negative R_G_B_ values
+        R_G_B_in = np.where(R_G_B_ >= 0, 
+                            np.power(FL * R_G_B_ / 100, 0.42),
+                            np.power(-FL * R_G_B_ / 100, 0.42))
+        Ra_Ga_Ba_ = np.where(R_G_B_ >= 0,
+                            (400 * R_G_B_in) / (27.13 + R_G_B_in) + 0.1,
+                            (-400 * R_G_B_in) / (27.13 + R_G_B_in) + 0.1)
 
         # Step 5: Calculate redness-greeness (a), yellowness-blueness (b) components and hue angle (h)
         a = Ra_Ga_Ba_[:, 0] - 12 * Ra_Ga_Ba_[:, 1] / 11 + Ra_Ga_Ba_[:, 2] / 11
@@ -159,7 +164,9 @@ class CIECAM02:
         s = 100*((M/Q)**0.5)
 
         # We only need to return 3 out of 7 components calculated. Here, I chose J, Q, H. The inverse will be built upon these three components. 
-
+# Teacher's slides uses JCh, will that make a difference?
+# might be a typo here: Q --> C
+#why times 1.0, 1.0, 0.9?
         return np.array([J, Q, H]).T*np.array([1.0, 1.0, 0.9]) # np.array([h, H, J, Q, C, M, s]).T
     
     def inverse_transfer_hue(self, H_, coarray):
@@ -191,6 +198,8 @@ class CIECAM02:
         C = np.maximum(C, 1e-5)
 
         coarray = np.array([0.0, 100.0, 200.0, 300.0, 400.0])
+#is it possible to just pass all attributes (only relative ones are allowed?)
+
         # position_ = coarray.searchsorted(H)
         # ufunc_TransferHue = np.frompyfunc(self.inverse_transfer_hue, 2, 1)
         # h_deg = ufunc_TransferHue(JCH[:, 2], position_).astype('float')
@@ -200,6 +209,7 @@ class CIECAM02:
         params = self.calculate_independent_parameters()
         t = (C / ((J / 100.0) ** 0.5 * ((1.64 - 0.29 ** params["n"]) ** 0.73))) ** (1 / 0.9)
         t = np.maximum(t, 1e-5)
+# should we handle t = 0 by setting p1 to 0 ?
         etemp = (np.cos(h_deg*np.pi/180 + 2) + 3.8) * (1 / 4)
         A = params["Aw"] * (J / 100) ** (1 / (params["c"] * params["z"]))
         p1 = ((50000 / 13.0) * params["Nc"] * params["Ncb"] * etemp) / t
@@ -207,6 +217,8 @@ class CIECAM02:
         p3 = 21 / 20.0
         h_rad = np.radians(h_deg)
 
+# What is the scope of this function?
+#should pass p3 as argument, will it alter the behavior of frompyfunc?
         # Step 3: Compute a and b
         def compute_a_b(t, h, p1, p2):
             if t == 0:

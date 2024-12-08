@@ -33,12 +33,13 @@ inv_Mhpe = np.array([
     [0.370950, 0.629054, -0.000008],
     [0.000000, 0.000000, 1.000000]])
 # Unique hue data for calculation of hue quadrature (Table 2.4)
+# psychological hues
 colordata = [
-    [20.14, 0.8, 0], 
-    [90, 0.7, 100], 
-    [164.25, 1.0, 200],
-    [237.53, 1.2, 300],
-    [380.14, 0.8, 400]]
+    [20.14, 0.8, 0], # red
+    [90, 0.7, 100], # yellow
+    [164.25, 1.0, 200], #green
+    [237.53, 1.2, 300], #blue
+    [380.14, 0.8, 400]] #red
 
 # ===== Grouping for Convenience ===== #
 constants = {
