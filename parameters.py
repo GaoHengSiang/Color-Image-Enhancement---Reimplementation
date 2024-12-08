@@ -3,7 +3,10 @@ import numpy as np
 # ========== Constant Parameters ========== #
 whitepoint = {
     'white': [95.05, 100.00, 108.88],
-    'c': [109.85, 100.0, 35.58]}
+    'c': [109.85, 100.0, 35.58],
+    'full_light': [193.25, 201.54, 197.48],
+    'low_light': [9.74, 10.43, 11.14],
+    'night_light': []}
 
 surround_params = {
     'average': {'F': 1.0, 'c': 0.69, 'Nc': 1.0},

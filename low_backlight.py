@@ -79,14 +79,17 @@ def device_xyz_to_rgb(image, M, gamma_r, gamma_g, gamma_b) -> np.ndarray:
     # Assert all values are in the range [0, inf)
     #assert np.all(image_inverse >= 0), "Some values are less than 0!"
     if np.any(image_inverse < 0):
-        print ("clipping negative intermediate values during conversion")
+        print ("clipping negative intermediate values during XYZ to RGB conversion")
         image_inverse = np.clip(image_inverse, a_min = 0, a_max = None)
 
     image_inverse[..., 0] = image_inverse[..., 0] ** (1/gamma_r)  
     image_inverse[..., 1] = image_inverse[..., 1] ** (1/gamma_g)  
     image_inverse[..., 2] = image_inverse[..., 2] ** (1/gamma_b)
 
-    # Reshape back to the original image dimensions
+    if np.any((image_inverse < 0) | (image_inverse > 1)):
+        image_inverse = np.clip(image_inverse, 0, 1)
+        print ("XYZ to RGB conversion results in out of range values, consider post gamut mapping")
+
     return image_inverse
 
 def simulated_low_backlight (image_rgb: np.ndarray, M, gamma_r, gamma_g, gamma_b) -> np.ndarray: 
@@ -96,13 +99,13 @@ def simulated_low_backlight (image_rgb: np.ndarray, M, gamma_r, gamma_g, gamma_b
     Args:
         image (numpy.ndarray): Input image as a 3D numpy array (H x W x 3) in RGB format, normalized to 0, 1.
 
-        Mf (numpy.ndarray): 3x3 transformation matrix. (device characteristic)
+        M (np.ndarray): target device characteristic, use M_l in this case 
 
-        gamma_rf (float): Gamma correction for the red channel. (device characteristic)
+        gamma_r (float): target device characteristic, use gamma_rl in this case 
 
-        gamma_gf (float): Gamma correction for the green channel. (device characteristic)
+        gamma_g (float): target device characteristic, use gamma_gl in this case 
 
-        gamma_bf (float): Gamma correction for the blue channel. (device characteristic)
+        gamma_b (float): target device characteristic, use gamma_bl in this case 
 
     Returns:
         numpy.ndarray: Transformed image (H x W x 3).
@@ -117,13 +120,11 @@ def simulated_low_backlight (image_rgb: np.ndarray, M, gamma_r, gamma_g, gamma_b
     # Assert all values are in the range [0, 1]
     assert np.all(image_rgb >= 0), "Some values are less than 0!"
     assert np.all(image_rgb <= 1), "Some values are greater than 1!"
-    image_gamma = np.zeros_like(image_rgb, dtype=np.float32)
-    h ,w, _ = image_rgb.shape
 
     #transform into tristimulus value given the low backlight display
 
-    image_xyz = device_rgb_to_xyz(image_rgb, M_l, gamma_rl, gamma_gl, gamma_bl)
-    image_inverse = device_xyz_to_rgb(image_xyz, M, gamma_r, gamma_g, gamma_b)
+    image_xyz = device_rgb_to_xyz(image_rgb, M, gamma_r, gamma_g, gamma_b)
+    image_inverse = device_xyz_to_rgb(image_xyz, M_f, gamma_rf, gamma_gf, gamma_bf)
     #image_gamma[..., 0] = image[..., 0] ** gamma_rl  
     #image_gamma[..., 1] = image[..., 1] ** gamma_gl  
     #image_gamma[..., 2] = image[..., 2] ** gamma_bl  
@@ -149,29 +150,31 @@ def post_gamut_mapping(original_rgb: np.ndarray, enhanced_xyz, JC: np.ndarray) -
       Alleviate loss of details, we implement soft clipping with weighted average
 
     Args:
-        original_rgb (np.ndarray): original RGB image
+        original_rgb (H x W x 3 np.ndarray): original RGB image
 
-        enhanced_xyz (np.ndarray): X Y Z tristimulus image
+        enhanced_xyz (H x W x 3 np.ndarray): X Y Z tristimulus image
 
-        JC (float): J*C, The coefficient of weighted average for each pixel
+        JC (H x W np.ndarray): J*C, The coefficient of weighted average for each pixel
 
     Returns:
         numpy.ndarray: Transformed image (H x W x 3).
     """ 
     assert np.all(original_rgb >= 0), "rgb should be normalized to [0, 1]"
     assert np.all(original_rgb <= 1), "rgb should be normalized to [0, 1]"
+    assert np.all(JC >= 0), "JC should be normalized to [0, 1]"
+    assert np.all(JC <= 1), "JC should be normalized to [0, 1]"
 
-    enhanced_rgb = device_xyz_to_rgb(enhanced_xyz, M_l, gamma_rl, gamma_gl, gamma_bl)
-    clipped_rgb = np.clip(enhanced_rgb, 0, 1).astype(np.uint8)
+    clipped_rgb = device_xyz_to_rgb(enhanced_xyz, M_l, gamma_rl, gamma_gl, gamma_bl)
       # Perform weighted average
     #result = cv2.addWeighted(original_rgb, JC, clipped_rgb, 1-JC, gamma = 0)
+    JC = np.expand_dims(JC, axis=-1)  # Shape becomes (512, 512, 1)
     result = original_rgb*JC + clipped_rgb*(1-JC)
     return result
 
 
 if __name__ == "__main__":
     # Read the image
-    image_bgr = cv2.imread("Lenna.png")
+    image_bgr = cv2.imread("./test_images/fruits.png")
 
     # Check if the image was successfully loaded
     if image_bgr is None:
@@ -199,15 +202,21 @@ if __name__ == "__main__":
 
     #Process the image
     image_rgb = image_rgb/255.0
-    transformed_image1 = simulated_low_backlight(image_rgb, M_f, gamma_rf, gamma_gf, gamma_bf)
+    transformed_image1 = simulated_low_backlight(image_rgb, M_l, gamma_rl, gamma_gl, gamma_bl)
 
     #test post gamut mapping
     #1. show tristimulus value of larger range
-    _img = device_rgb_to_xyz(image_rgb, M_f, gamma_rf, gamma_gf, gamma_bf)
+    #_img = device_rgb_to_xyz(image_rgb, M_f, gamma_rf, gamma_gf, gamma_bf)
     #low backlight should not be able to handle full gamut, resulting in out of range RGB values
     #transformed_image2 = post_gamut_mapping(image_rgb, _img, 0.5) #return rgb values
     #to view the effect on normal screen,  we simulate low backlight (using M_f, gamma_xf as my devices characteristic)
     #transformed_image2 = simulated_low_backlight(transformed_image2, M_f, gamma_rf, gamma_gf, gamma_bf) 
+
+    sample_white = np.ones((1, 1, 3), dtype = np.float32)
+    W_f = device_rgb_to_xyz(sample_white, M_f, gamma_rf, gamma_gf, gamma_bf)
+    W_l = device_rgb_to_xyz(sample_white, M_l, gamma_rl, gamma_gl, gamma_bl)
+    print(f"W_f = {W_f}")
+    print(f"W_l = {W_l}")
 
     # Create a figure with two subplots side by side
     plt.figure(figsize=(10, 5))  # Adjust the figure size
