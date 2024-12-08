@@ -21,7 +21,7 @@ def device_rgb_to_xyz(image, M, gamma_r, gamma_g, gamma_b) -> np.ndarray:
     Transforms an RGB image using the formula [x y z] = M [R^gamma_r G^gamma_g B^gamma_b].
     
     Args:
-        image (numpy.ndarray): Input image as a 3D numpy array (H x W x 3) in RGB format.
+        image (numpy.ndarray): Input image as a 3D numpy array (H x W x 3) in RGB format, normalized to [0, 1].
 
         M (numpy.ndarray): 3x3 transformation matrix. (device characteristic)
 
@@ -38,9 +38,9 @@ def device_rgb_to_xyz(image, M, gamma_r, gamma_g, gamma_b) -> np.ndarray:
     image_gamma = np.zeros_like(image, dtype=np.float32)
     h ,w, _ = image.shape
 
-    # Assert all values are in the range [0, 255]
+    # Assert all values are in the range [0, 1]
     assert np.all(image >= 0), "Some values are less than 0!"
-    assert np.all(image <= 255), "Some values are greater than 255!"
+    assert np.all(image <= 1), "Some values are greater than 1!"
 
     image_gamma[..., 0] = image[..., 0] ** gamma_r  # R^gamma_r
     image_gamma[..., 1] = image[..., 1] ** gamma_g  # G^gamma_g
@@ -89,12 +89,12 @@ def device_xyz_to_rgb(image, M, gamma_r, gamma_g, gamma_b) -> np.ndarray:
     # Reshape back to the original image dimensions
     return image_inverse
 
-def simulated_low_backlight (image: np.ndarray, M_f, gamma_rf, gamma_gf, gamma_bf) -> np.ndarray: 
+def simulated_low_backlight (image_rgb: np.ndarray, M, gamma_r, gamma_g, gamma_b) -> np.ndarray: 
     """
       Given RGB image and the viewing device's characteristics, simulates what it looks like on a low backlight display
     
     Args:
-        image (numpy.ndarray): Input image as a 3D numpy array (H x W x 3) in RGB format.
+        image (numpy.ndarray): Input image as a 3D numpy array (H x W x 3) in RGB format, normalized to 0, 1.
 
         Mf (numpy.ndarray): 3x3 transformation matrix. (device characteristic)
 
@@ -114,28 +114,33 @@ def simulated_low_backlight (image: np.ndarray, M_f, gamma_rf, gamma_gf, gamma_b
     #                [0.28, 1.93, 8.93]])
     #
     #=========================================================
-    image_gamma = np.zeros_like(image, dtype=np.float32)
-    h ,w, _ = image.shape
+    # Assert all values are in the range [0, 1]
+    assert np.all(image_rgb >= 0), "Some values are less than 0!"
+    assert np.all(image_rgb <= 1), "Some values are greater than 1!"
+    image_gamma = np.zeros_like(image_rgb, dtype=np.float32)
+    h ,w, _ = image_rgb.shape
 
     #transform into tristimulus value given the low backlight display
 
-    image_gamma[..., 0] = image[..., 0] ** gamma_rl  
-    image_gamma[..., 1] = image[..., 1] ** gamma_gl  
-    image_gamma[..., 2] = image[..., 2] ** gamma_bl  
+    image_xyz = device_rgb_to_xyz(image_rgb, M_l, gamma_rl, gamma_gl, gamma_bl)
+    image_inverse = device_xyz_to_rgb(image_xyz, M, gamma_r, gamma_g, gamma_b)
+    #image_gamma[..., 0] = image[..., 0] ** gamma_rl  
+    #image_gamma[..., 1] = image[..., 1] ** gamma_gl  
+    #image_gamma[..., 2] = image[..., 2] ** gamma_bl  
     # Apply the matrix transformation
-    transformed = np.dot(M_l, image_gamma.reshape(-1, 3).T)
+    #transformed = np.dot(M_l, image_gamma.reshape(-1, 3).T)
 
     #=========================================================
     # Inverse transform with the viewing device's characteristic to simulate the effect
-    M_f_inverse = np.linalg.inv(M_f)
-    image_inverse = np.dot(M_f_inverse, transformed).T
-    image_inverse = image_inverse.reshape(h, w, 3)
-    image_inverse[..., 0] = image_inverse[..., 0] ** (1/gamma_rf)  
-    image_inverse[..., 1] = image_inverse[..., 1] ** (1/gamma_gf)  
-    image_inverse[..., 2] = image_inverse[..., 2] ** (1/gamma_bf)
+    #M_f_inverse = np.linalg.inv(M_f)
+    #image_inverse = np.dot(M_f_inverse, transformed).T
+    #image_inverse = image_inverse.reshape(h, w, 3)
+    #image_inverse[..., 0] = image_inverse[..., 0] ** (1/gamma_rf)  
+    #image_inverse[..., 1] = image_inverse[..., 1] ** (1/gamma_gf)  
+    #image_inverse[..., 2] = image_inverse[..., 2] ** (1/gamma_bf)
 
     # Reshape back to the original image dimensions
-    return image_inverse.astype(np.uint8)
+    return image_inverse
 
 def post_gamut_mapping(original_rgb: np.ndarray, enhanced_xyz, JC: np.ndarray) -> np.ndarray:
     """
@@ -153,8 +158,11 @@ def post_gamut_mapping(original_rgb: np.ndarray, enhanced_xyz, JC: np.ndarray) -
     Returns:
         numpy.ndarray: Transformed image (H x W x 3).
     """ 
+    assert np.all(original_rgb >= 0), "rgb should be normalized to [0, 1]"
+    assert np.all(original_rgb <= 1), "rgb should be normalized to [0, 1]"
+
     enhanced_rgb = device_xyz_to_rgb(enhanced_xyz, M_l, gamma_rl, gamma_gl, gamma_bl)
-    clipped_rgb = np.clip(enhanced_rgb, 0, 255).astype(np.uint8)
+    clipped_rgb = np.clip(enhanced_rgb, 0, 1).astype(np.uint8)
       # Perform weighted average
     #result = cv2.addWeighted(original_rgb, JC, clipped_rgb, 1-JC, gamma = 0)
     result = original_rgb*JC + clipped_rgb*(1-JC)
@@ -190,6 +198,7 @@ if __name__ == "__main__":
     #                [[0, 0, 255], [128, 0, 128], [255, 255, 255]]], dtype=np.uint8)
 
     #Process the image
+    image_rgb = image_rgb/255.0
     transformed_image1 = simulated_low_backlight(image_rgb, M_f, gamma_rf, gamma_gf, gamma_bf)
 
     #test post gamut mapping
