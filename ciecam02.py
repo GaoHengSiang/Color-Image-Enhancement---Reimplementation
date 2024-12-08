@@ -168,10 +168,10 @@ class CIECAM02:
 #EDIT: Changed to JCH and removed scaling
 
 #why times 1.0, 1.0, 0.9?
-        #before 
+#before 
         # return np.array([J, Q, H]).T*np.array([1.0, 1.0, 0.9]) # np.array([h, H, J, Q, C, M, s]).T
-        #after
-        return np.array([J, C, H]).T
+#after
+        return np.array([J, C, h]).T
     
     def inverse_transfer_hue(self, H_, coarray):
         position = coarray.searchsorted(H_)
@@ -183,50 +183,50 @@ class CIECAM02:
             h -= 360
         return h
     
-    def inverse_model(self, JCH):
+    def inverse_model(self, JCh):
         """
-        Converts JCH (Lightness, Chroma, Hue) to XYZ color space using the CIECAM02 model.
+        Converts JCh (Lightness, Chroma, Hue angle) to XYZ color space using the CIECAM02 model.
 
         Args:
-            JCH (numpy.ndarray): Array of shape (N, 3) containing J (Lightness), 
-                                C (Chroma), and H (Hue in CAM02).
+            JCh (numpy.ndarray): Array of shape (N, 3) containing J (Lightness), 
+                                C (Chroma), and H (Hue angle in CAM02).
 
         Returns:
             numpy.ndarray: Array of shape (N, 3) containing XYZ tristimulus values.
         """
         # Step 1: Extract J, C, and H and handle scaling for input format
-#        JCH = JCH * np.array([1.0, 1.0, 10 / 9.0])
+        #JCH = JCH * np.array([1.0, 1.0, 10 / 9.0])
 #EDIT: Removed scaling of H in forward mode
-
-        J, C, H = JCH[:, 0], JCH[:, 1], JCH[:, 2]
+#EDIT:  pass h directly
+        J, C, h = JCh[:, 0], JCh[:, 1], JCh[:, 2]
         # Clip J and C to avoid numerical issues
         J = np.maximum(J, 1e-5)
         C = np.maximum(C, 1e-5)
+        h_deg = h
+        h_rad = np.radians(h_deg)
 
-        coarray = np.array([0.0, 100.0, 200.0, 300.0, 400.0])
-#is it possible to just pass all attributes (only relative ones are allowed?)
-
-        # position_ = coarray.searchsorted(H)
-        # ufunc_TransferHue = np.frompyfunc(self.inverse_transfer_hue, 2, 1)
-        # h_deg = ufunc_TransferHue(JCH[:, 2], position_).astype('float')
-        h_deg = np.array([self.inverse_transfer_hue(H_i, coarray) for H_i in H])
-
+    
+#This block concerns recovering h (hue angle) from H (hue composition)
+#can be omitted if we choose to pass JCh between the forward and inverse model
+        #coarray = np.array([0.0, 100.0, 200.0, 300.0, 400.0])
+        #h_deg = np.array([self.inverse_transfer_hue(H_i, coarray) for H_i in H])
+        #h_rad = np.radians(h_deg)
+    
         # Step 2: Calculate t, A, and p1, p2, p3 based on J, C, and H
         params = self.calculate_independent_parameters()
         t = (C / ((J / 100.0) ** 0.5 * ((1.64 - 0.29 ** params["n"]) ** 0.73))) ** (1 / 0.9)
         t = np.maximum(t, 1e-5)
 # should we handle t = 0 by setting p1 to 0 ?
+#EDIT: handle t = 0 by setting p1 to 0  --> a, b will be set to 0 for this case 
         etemp = (np.cos(h_deg*np.pi/180 + 2) + 3.8) * (1 / 4)
         A = params["Aw"] * (J / 100) ** (1 / (params["c"] * params["z"]))
-        p1 = ((50000 / 13.0) * params["Nc"] * params["Ncb"] * etemp) / t
+        p1 = np.where(t != 0, ((50000 / 13.0) * params["Nc"] * params["Ncb"] * etemp) / t, 0)
         p2 = A / params["Nbb"] + 0.305
         p3 = 21 / 20.0
-        h_rad = np.radians(h_deg)
-
-# What is the scope of this function?
-#should pass p3 as argument, will it alter the behavior of frompyfunc?
-        # Step 3: Compute a and b
-        def compute_a_b(t, h, p1, p2):
+        
+#should pass p3 as argument, will it alter the behavior of frompyfunc?    
+        
+        def compute_a_b(t, h, p1, p2, p3):
             if t == 0:
                 a, b = 0, 0
             elif np.abs(np.sin(h)) >= np.abs(np.cos(h)):
@@ -242,9 +242,10 @@ class CIECAM02:
                 )
                 b = a * (np.sin(h) / np.cos(h))
             return np.array([a, b])
-
-        ufunc_evalAB = np.frompyfunc(compute_a_b, 4, 1)
-        ab_values = np.vstack(ufunc_evalAB(t, h_rad, p1, p2))
+        
+        # Step 3: Compute a and b
+        ufunc_evalAB = np.frompyfunc(compute_a_b, 5, 1)
+        ab_values = np.vstack(ufunc_evalAB(t, h_rad, p1, p2, p3))
         # ab_values = np.array([compute_a_b(h, p1[i], p2[i]) for i, h in enumerate(h_rad)])
         a, b = ab_values[:, 0], ab_values[:, 1]
 
