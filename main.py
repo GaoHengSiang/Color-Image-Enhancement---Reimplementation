@@ -61,11 +61,11 @@ if __name__ == "__main__":
 
     # Forward pass 
     XYZ = rgb2xyz(image_rgb.reshape(-1, 3)) 
-    JCH = model.xyz_to_ciecam02(XYZ) 
+    JCh = model.xyz_to_ciecam02(XYZ) 
 #Possible error: model returns JQH, here noted JCH
 
     # Reverse back to a new image
-    RGB = xyz2rgb(model.inverse_model(JCH)).reshape(shape)
+    RGB = xyz2rgb(model.inverse_model(JCh)).reshape(shape)
     # rgb = jch2rgb(JCH).reshape(shape)
     im = Image.fromarray(RGB)
     im.show()
