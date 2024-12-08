@@ -8,7 +8,7 @@ whitepoint = {
 surround_params = {
     'average': {'F': 1.0, 'c': 0.69, 'Nc': 1.0},
     'dim': {'F': 0.9, 'c': 0.59, 'Nc': 0.95},
-    'dark': {'F': 0.8, 'c': 0.525, 'Nc': 0.8},
+    'dark': {'F': 0.8, 'c': 0.535, 'Nc': 0.8},
 }
 
 light_intensity = {'default': 80.0, 'high': 318.31, 'low': 31.83}
