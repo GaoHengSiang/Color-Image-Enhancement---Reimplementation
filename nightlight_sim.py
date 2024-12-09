@@ -1,3 +1,7 @@
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+from PIL import Image
 """
 This code is courtesy of:
 https://tannerhelland.com/2012/09/18/convert-temperature-rgb-algorithm-code.html
@@ -7,17 +11,11 @@ closely simulates the windows nightlight effect
 
 """
 
-
-
-import cv2
-import numpy as np
-import matplotlib.pyplot as plt
-from PIL import Image
-
-def apply_night_light_effect_cv2(image: np.ndarray, intensity=0.5):
+def naive_nightlight(image: np.ndarray, intensity=0.5):
     """
+    DEPRECATED
     Apply a Night Light effect to an image using OpenCV and display it with Matplotlib.
-
+    
     Args:
         image_path (str): Path to the input image.
         intensity (float): Level of blue reduction (0.0 to 1.0). Higher means more reduction.
@@ -40,7 +38,6 @@ def apply_night_light_effect_cv2(image: np.ndarray, intensity=0.5):
     result = np.clip(result * 0.9, 0, 255).astype(np.uint8)
 
     return result
-
 
 def temp_by_channel_gain_tabl(image, temp):
     kelvin_table = {
@@ -81,8 +78,6 @@ def temp_by_channel_gain_tabl(image, temp):
     image = np.clip(image, 0, 255).astype(np.uint8)
 
     return image
-import numpy as np
-import cv2
 
 def temp_by_channel_gain_cont(image, temperature):
     """
@@ -125,7 +120,7 @@ def temp_by_channel_gain_cont(image, temperature):
     image[..., 2] *= blue  # Scale Blue channel
 
     # Clip values to [0, 255] and convert back to uint8
-    image = np.clip(image, 0, 255).astype(np.uint8)
+    image = np.clip(image, 0, 1)
 
     return image
 
