@@ -10,7 +10,10 @@ import argparse
 
 if __name__ == "__main__":
     """
-    Usage: python .\lowlight_enhancement.py -i .\test_images\fruits.png
+    manual: 
+        python ./nightlight_compen_demo.py -h
+    example:
+        python ./nightlight_compen_demo.py -i ./Lenna.png -s 100 -m
     """
     parser = argparse.ArgumentParser(description="Process an image file.")
     parser.add_argument(
