@@ -13,7 +13,7 @@ if __name__ == "__main__":
     manual: 
         python ./nightlight_compen_demo.py -h
     example:
-        python ./nightlight_compen_demo.py -i ./Lenna.png -s 100 -m
+        python ./nightlight_compen_demo.py -i ./Lenna.png -s 100 -m -c
     """
     parser = argparse.ArgumentParser(description="Process an image file.")
     parser.add_argument(
@@ -30,20 +30,23 @@ if __name__ == "__main__":
     parser.add_argument(
     "-m", "--map", 
     action="store_true", 
+    default=False,
     help="Enable post-gamut mapping (use --no-map to disable)."
     )
     parser.add_argument(
-        "--no-map", 
-        dest="map", 
-        action="store_false", 
-        help="Disable post-gamut mapping (use --map to enable)."
+    "-c", "--compensate", 
+    action="store_true", 
+    default=False,
+    help="Apply inverse gain to counteract the nightlight effect"
     )
+
 
     # Parse arguments
     args = parser.parse_args()
     input_file = args.input
     strength = args.strength
     do_map = args.map
+    do_compensation = args.compensate
 
     # Load the image
     image_bgr = cv2.imread(input_file)
@@ -92,12 +95,17 @@ if __name__ == "__main__":
     print("Inverse Channel Gain, handling zero denominator, clipping...")
     safe_gain = np.clip(channel_gain, 1e-5, 1)
     RGB_nl = RGB_nl / safe_gain
+    if do_compensation:
+        print("Applying inverse gain twice to counteract nightlight, effects may vary")
+        RGB_nl = RGB_nl / safe_gain
+    else:
+        print("inverse gain compensation disabled, use -c, --compensate to enable")
     RGB_clip = np.clip(RGB_nl, 0, 1)
     #RGB_clip = RGB_nl
 
     #Post Gamut Mapping
     if do_map:
-        print("Post Gamut Mapping enabled, use --no-map to disable...")
+        print("Post Gamut Mapping enabled")
         JCh_reshape = JCh.reshape(shape)
         JC = JCh_reshape[..., 0] * JCh_reshape[..., 1]
         # Normalize JC to [0, 1] range
