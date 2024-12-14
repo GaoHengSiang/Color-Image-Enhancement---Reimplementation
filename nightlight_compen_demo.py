@@ -99,7 +99,7 @@ if __name__ == "__main__":
         print("Applying inverse gain twice to counteract nightlight, effects may vary")
         RGB_nl = RGB_nl / safe_gain
     else:
-        print("inverse gain compensation disabled, use -c, --compensate to enable")
+        print("\033[33m[WARNING]\033[0m inverse gain compensation disabled, use -c, --compensate to enable")
     RGB_clip = np.clip(RGB_nl, 0, 1)
     #RGB_clip = RGB_nl
 
@@ -113,7 +113,7 @@ if __name__ == "__main__":
         normalized_JC = np.expand_dims(normalized_JC, axis=-1)  # Shape becomes (512, 512, 1)
         RGB_prime = RGB_i*normalized_JC + RGB_clip*(1-normalized_JC)
     else:
-        print("Post Gamut Mapping disabled, use -m, --map to enable...")
+        print("\033[33m[WARNING]\033[0m post Gamut Mapping disabled, use -m, --map to enable...")
         RGB_prime = RGB_clip
 
     #print(np.max(RGB_prime))

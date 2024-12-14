@@ -9,7 +9,7 @@ import argparse
 
 if __name__ == "__main__":
     """
-    Usage: python .\lowlight_enhancement.py -i .\test_images\fruits.png
+    Usage: python .\lowlight_enhancement.py -i .\test_images\fruits.png -m 
     """
     parser = argparse.ArgumentParser(description="Process an image file.")
     parser.add_argument(
@@ -17,11 +17,16 @@ if __name__ == "__main__":
         required=True, 
         help="Path to the input image file."
     )
-    
+    parser.add_argument(
+    "-m", "--map", 
+    action="store_true", 
+    default=False,
+    help="Enable post-gamut mapping (use --no-map to disable)."
+    )
     # Parse arguments
     args = parser.parse_args()
     input_file = args.input
-    
+    do_map = args.map
     # Load the image
     image_bgr = cv2.imread(input_file)
 
@@ -51,12 +56,16 @@ if __name__ == "__main__":
     XYZ_e = model.inverse_model(JCh).reshape(shape)
 
     #post gamut mapping
-    print("post gamut mapping...")
-    JCh_reshape = JCh.reshape(shape)
-    JC = JCh_reshape[..., 0] * JCh_reshape[..., 1]
-    # Normalize array to [0, 1] range
-    normalized_JC = (JC - np.min(JC)) / (np.max(JC) - np.min(JC))
-    RGB_prime = post_gamut_mapping(RGB_i, XYZ_e, normalized_JC)
+    if do_map:
+        print("post gamut mapping...")
+        JCh_reshape = JCh.reshape(shape)
+        JC = JCh_reshape[..., 0] * JCh_reshape[..., 1]
+        # Normalize array to [0, 1] range
+        normalized_JC = (JC - np.min(JC)) / (np.max(JC) - np.min(JC))
+        RGB_prime = post_gamut_mapping(RGB_i, XYZ_e, normalized_JC)
+    else:
+        print("\033[33m[WARNING]\033[0m post gamut mapping disabled, use -m, --map to enable")
+        RGB_prime = device_xyz_to_rgb(XYZ_e, M_l, gamma_rl, gamma_gl, gamma_bl)
     # rgb = jch2rgb(JCH).reshape(shape)
     print("Simulate low backlight for original image...")
     without_enhancement = simulated_low_backlight(RGB_i, M_l, gamma_rl, gamma_gl, gamma_bl)
