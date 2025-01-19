@@ -99,7 +99,7 @@ class CIECAM02:
             (((h_prime-h_i)/e_i) + (h_i1-h_prime)/e_i1))
         return Hue
     
-    def xyz_to_ciecam02(self, XYZ):
+    def xyz_to_ciecam02(self, XYZ: np.ndarray) -> np.ndarray:
         """
         Converts XYZ tristimulus values to CIECAM02 model.
 
@@ -122,8 +122,11 @@ class CIECAM02:
         R_G_B_ = RcGcBc.dot(self.inv_Mcat02.T).dot(self.Mhpe.T)
 
         # Step 4: Post-adaptation response
-        R_G_B_in = np.power(FL * R_G_B_ / 100, 0.42)
-        Ra_Ga_Ba_ = (400 * R_G_B_in) / (27.13 + R_G_B_in) + 0.1
+        R_G_B_in = np.power(FL * np.abs(R_G_B_) / 100, 0.42)
+                            
+        Ra_Ga_Ba_ = np.where(R_G_B_ >= 0,
+                            (400 * R_G_B_in) / (27.13 + R_G_B_in) + 0.1,
+                            (-400 * R_G_B_in) / (27.13 + R_G_B_in) + 0.1)
 
         # Step 5: Calculate redness-greeness (a), yellowness-blueness (b) components and hue angle (h)
         a = Ra_Ga_Ba_[:, 0] - 12 * Ra_Ga_Ba_[:, 1] / 11 + Ra_Ga_Ba_[:, 2] / 11
@@ -154,13 +157,16 @@ class CIECAM02:
         t = (
             (50000/13.0)*params["Nc"]*params["Ncb"]*etemp*((a**2+b**2)**0.5)) /\
             (Ra_Ga_Ba_[:, 0]+Ra_Ga_Ba_[:, 1]+(21/20.0)*Ra_Ga_Ba_[:, 2])
+        
         C = t**0.9*((J/100.0)**0.5)*((1.64-(0.29**params["n"]))**0.73)
-        M = C*(FL**0.25)
-        s = 100*((M/Q)**0.5)
+
+        M = C * (FL**0.25)
+
+        s = 100 * ((M / Q) ** 0.5)
 
         # We only need to return 3 out of 7 components calculated. Here, I chose J, Q, H. The inverse will be built upon these three components. 
 
-        return np.array([J, Q, H]).T*np.array([1.0, 1.0, 0.9]) # np.array([h, H, J, Q, C, M, s]).T
+        return np.array([J, Q, h]).T*np.array([1.0, 1.0, 0.9]) # np.array([h, H, J, Q, C, M, s]).T
     
     def inverse_transfer_hue(self, H_, coarray):
         position = coarray.searchsorted(H_)
@@ -172,29 +178,26 @@ class CIECAM02:
             h -= 360
         return h
     
-    def inverse_model(self, JCH):
+    def inverse_model(self, JCh: np.ndarray) -> np.ndarray:
         """
         Converts JCH (Lightness, Chroma, Hue) to XYZ color space using the CIECAM02 model.
 
         Args:
-            JCH (numpy.ndarray): Array of shape (N, 3) containing J (Lightness), 
-                                C (Chroma), and H (Hue in CAM02).
+            JCh (numpy.ndarray): Array of shape (N, 3) containing 
+                J (Lightness), C (Chroma), and h (Hue angle in CAM02).
 
         Returns:
-            numpy.ndarray: Array of shape (N, 3) containing XYZ tristimulus values.
+            numpy.ndarray: Array of shape (N, 3) containing XYZ tristimulus 
+                values.
         """
-        # Step 1: Extract J, C, and H and handle scaling for input format
-        JCH = JCH * np.array([1.0, 1.0, 10 / 9.0])
-        J, C, H = JCH[:, 0], JCH[:, 1], JCH[:, 2]
+        # Step 1: Extract J, C, and h and handle scaling for input format
+        J, C, h = JCh[:, 0], JCh[:, 1], JCh[:, 2]
         # Clip J and C to avoid numerical issues
         J = np.maximum(J, 1e-5)
         C = np.maximum(C, 1e-5)
 
-        coarray = np.array([0.0, 100.0, 200.0, 300.0, 400.0])
-        # position_ = coarray.searchsorted(H)
-        # ufunc_TransferHue = np.frompyfunc(self.inverse_transfer_hue, 2, 1)
-        # h_deg = ufunc_TransferHue(JCH[:, 2], position_).astype('float')
-        h_deg = np.array([self.inverse_transfer_hue(H_i, coarray) for H_i in H])
+        h_deg = h
+        h_rad = np.radians(h_deg)
 
         # Step 2: Calculate t, A, and p1, p2, p3 based on J, C, and H
         params = self.calculate_independent_parameters()
@@ -202,13 +205,12 @@ class CIECAM02:
         t = np.maximum(t, 1e-5)
         etemp = (np.cos(h_deg*np.pi/180 + 2) + 3.8) * (1 / 4)
         A = params["Aw"] * (J / 100) ** (1 / (params["c"] * params["z"]))
-        p1 = ((50000 / 13.0) * params["Nc"] * params["Ncb"] * etemp) / t
+        p1 = np.where(t != 0, ((50000 / 13.0) * params["Nc"] * params["Ncb"] * etemp) / t, 0)
         p2 = A / params["Nbb"] + 0.305
         p3 = 21 / 20.0
-        h_rad = np.radians(h_deg)
 
         # Step 3: Compute a and b
-        def compute_a_b(t, h, p1, p2):
+        def compute_a_b(t, h, p1, p2, p3):
             if t == 0:
                 a, b = 0, 0
             elif np.abs(np.sin(h)) >= np.abs(np.cos(h)):
@@ -225,9 +227,9 @@ class CIECAM02:
                 b = a * (np.sin(h) / np.cos(h))
             return np.array([a, b])
 
-        ufunc_evalAB = np.frompyfunc(compute_a_b, 4, 1)
-        ab_values = np.vstack(ufunc_evalAB(t, h_rad, p1, p2))
-        # ab_values = np.array([compute_a_b(h, p1[i], p2[i]) for i, h in enumerate(h_rad)])
+        ufunc_evalAB = np.frompyfunc(compute_a_b, 5, 1)
+        ab_values = np.vstack(ufunc_evalAB(t, h_rad, p1, p2, p3))
+
         a, b = ab_values[:, 0], ab_values[:, 1]
 
         # Step 4: Calculate post-adaptation values Ra_, Ga_, Ba_
@@ -253,18 +255,26 @@ class CIECAM02:
         XYZ = RGB.dot(self.inv_Mcat02.T)
 
         return XYZ
+    
 
+# =============================================================================
+if __name__ == "__main__":
+    # Example usage of the CIECAM02 model
+    from parameters import constants, matrices, colordata 
+    from preprocessing import preprocess_image
 
-    # def rgb_to_jch(self, rgb_image):
-    #     """
-    #     Converts an RGB image to JCH color space using the CIECAM02 model.
+    # Initialize the CIECAM02 model
+    model = CIECAM02(constants, matrices, colordata)
 
-    #     Args:
-    #         rgb_image (numpy.ndarray): RGB image array.
+    # Configure the model with specific viewing conditions
+    model.configure(white="white", surround="average", light="default", bg="default")
 
-    #     Returns:
-    #         numpy.ndarray: JCH representation of the image.
-    #     """
-    #     XYZ_image = rgb2xyz(rgb_image)
-    #     JCH_image = self.xyz_to_ciecam02(XYZ_image)
-    #     return JCH_image
+    # Example usage of the forward model
+    image_path = "./srgb_images/srgb_images_1.jpg"
+    xyz_image = preprocess_image(image_path) 
+    JCh = model.xyz_to_ciecam02(xyz_image.reshape(-1,3))
+    print("CIECAM02 attributes:", JCh.shape)
+
+    # Example usage of the inverse model
+    xyz_reconstructed = model.inverse_model(JCh)
+    print("Reconstructed XYZ values:", xyz_reconstructed)
